@@ -1,0 +1,299 @@
+  /*  
+  Moteur de jeu 2D FXGameEngine
+  Copyright (C) 2010 JF Boily — Tous droits réservés.
+  
+  Ce programme est un logiciel libre ; vous pouvez le redistribuer ou le
+  modifier suivant les termes de la “GNU General Public License” telle que
+  publiée par la Free Software Foundation : soit la version 3 de cette
+  licence, soit (à votre gré) toute version ultérieure.
+  
+  Ce programme est distribué dans l’espoir qu’il vous sera utile, mais SANS
+  AUCUNE GARANTIE : sans même la garantie implicite de COMMERCIALISABILITÉ
+  ni d’ADÉQUATION À UN OBJECTIF PARTICULIER. Consultez la Licence Générale
+  Publique GNU pour plus de détails.
+  
+  Vous devriez avoir reçu une copie de la Licence Générale Publique GNU avec
+  ce programme ; si ce n’est pas le cas, consultez :
+  <http://www.gnu.org/licenses/>. 
+  */
+
+package FXGameEngine;
+
+
+import javax.microedition.lcdui.Image;
+import javax.microedition.lcdui.game.Sprite;
+/**
+ * La classe FXGameSprite implémentes les fonctionnalités avancées d'un Sprite.
+ * Notamment:
+ * <ul>
+ * <li>Animations</li>
+ * <li>Gestion du point de référence</li>
+ * <li>Gestion de la priorité d'affichage</li>
+ * </ul>
+ * Pour utiliser des objets FXGameSprite utiliser les méthodes createSprite()
+ * de la classe FXGameCanvas. <b>EN AUCUN TEMPS
+ * </b> vous ne devez appeler le constructeur de cette classe.
+ * @see FXGameCanvas
+ * @author jfboily 
+ */
+public class FXGameSprite extends Sprite
+{
+    /**
+     * Nombre maximum de séquences d'animation.
+     */
+    public final int MAX_ANIM_SEQ = 16;
+    /**
+     * Nombre maximum de frames d'animation dans une séquence.
+     */
+    public final int MAX_ANIM_FRAMES = 64;
+    private int nbFrames;
+    private int nbAnimSeq = 0;
+    private int[][] animSeq = new int[MAX_ANIM_SEQ][];
+    private boolean animPlaying = false;
+    private boolean animLoop = false;
+    private int animCurFrame = 0;
+    private long frameDelay;
+    private long curFrameTime;
+    private boolean animDone = false;
+    private int refX;
+    private int refY;
+    private int priority;
+
+
+/**
+ * Constructeur pour un Sprite SANS animation.
+ * @param img Image à utiliser pour ce sprite.
+ * @param defineRefCenter Indique si on doit définir le point de référence au
+ * centre du sprite. Défaut = coin supérieur gauche.
+ */
+    public FXGameSprite(Image img, boolean defineRefCenter)
+    {
+        super(img);
+        nbFrames = 1;
+        if(!defineRefCenter)
+        {
+            refX = 0;
+            refY = 0;
+            defineReferencePixel(refX, refY);
+        }
+        else
+        {
+            refX = img.getWidth() / 2;
+            refY = img.getHeight() / 2;
+            defineReferencePixel(refX, refY);
+        }
+
+        priority = 1;
+    }
+
+    /**
+     * Constructeur pour un Sprite AVEC animations.
+     * @param img Image a utiliser pour le sprite.
+     * @param width Largeur d'un frame d'animation.
+     * @param height Hauteur d'un frame d'animation.
+     * @param defineRefCenter Indique si on doit définir le point de référence
+     * au centre du sprite. Défaut = coin supérieur gauche.
+     */
+    public FXGameSprite(Image img, int width, int height, boolean defineRefCenter)
+    {
+        super(img, width, height);
+        nbFrames = super.getRawFrameCount();
+
+        if(defineRefCenter)
+        {
+            refX = width / 2;
+            refY = height / 2;
+            defineReferencePixel(refX, refY);
+        }
+        else
+        {
+            refX = 0;
+            refY = 0;
+            defineReferencePixel(refX, refY);
+        }
+        priority = 1;
+    }
+
+    /**
+     * Définit la priorité d'affichage du sprite.
+     * @deprecated
+     * @param p
+     */
+    public void setPriority(int p)
+    {
+        priority = p;
+    }
+
+    /**
+     * Indique la priorité d'affichage du sprite.
+     * @return valeur de la priorité d'affichage.
+     */
+    public int getPriority()
+    {
+        return priority;
+    }
+
+    /**
+     * Définit la nouvelle position du sprite à l'écran par rapport à son point
+     * de référence.
+     * @param x coordonnée X du point de référence.
+     * @param y coordonnée Y du point de référence.
+     */
+    public void setPosition(int x, int y)
+    {
+        super.setPosition(x - refX, y - refY);
+        //setRefPixelPosition(x, y);
+    }
+
+    /**
+     * Obtient la coordonnée X du point de référence.
+     * @return coordonnée X du point de référence.
+     */
+    public int X()
+    {
+        //return getX() - refX;
+        return getRefPixelX();
+    }
+
+    /**
+     * Obtient la coordonnée Y du point de référence.
+     * @return coordonnée Y du point de référence.
+     */
+    public int Y()
+    {
+        //return getY() - refY;
+        return getRefPixelY();
+    }
+
+    /**
+     * Crée une séquence d'animation à partir d'un tableau de frames.
+     * @param sequence tableau contenant les index des frames formant la
+     * séquence.
+     * @return identificateur de la séquence d'animation.
+     */
+    public int createAnim(int[] sequence)
+    {
+        int ret = nbAnimSeq;
+        animSeq[nbAnimSeq] = sequence;
+        nbAnimSeq++;
+        return ret;
+    }
+
+    /**
+     * Démarre la séquence d'animation par défaut. À utiliser seulement si vous
+     * n'avaez définit aucune séquence d'animation à l'aide de createAnim().
+     * @param loop indique si on doit jouer la séquence en boucle.
+     */
+    public void playAnim(boolean loop)
+    {
+        frameDelay = 100;
+        animLoop = loop;
+        curFrameTime = 0;
+        setFrame(0);
+        animDone = false;
+        animPlaying = true;
+    }
+
+    /**
+     * Arrête la séquence d'animation de affiche le sprite au frame d'animation
+     * spécifié.
+     * @param gotoFrame indique le frame à afficher après l'arrêt.
+     */
+    public void stopAnim(int gotoFrame)
+    {
+        stopAnim();
+        setFrame(gotoFrame);
+    }
+
+    /**
+     * Arrête la séquence d'animation. Le sprite reste au frame d'animation
+     * actuel.
+     */
+    public void stopAnim()
+    {
+        animPlaying = false;
+    }
+
+
+    /**
+     * Démarre une séquence d'animation.
+     * @param animNo identificateur de la séquence.
+     */
+    public void playAnim(int animNo)
+    {
+        playAnim(animNo, 60, false);
+    }
+
+     /**
+     * Démarre une séquence d'animation.
+     * @param animNo identificateur de la séquence.
+      * @param loop indique si on doit jouer la séquence en boucle.
+     */
+    public void playAnim(int animNo, boolean loop)
+    {
+        playAnim(animNo, 60, loop);
+    }
+
+    /**
+     * Démarre un séquence d'animation.
+     * @param animNo identificateur de la séquence.
+     * @param frameDelay delai minimal (en millisecondes) entre les frames.
+     * @param loop indique si on doit jouer la séquence en boucle.
+     */
+    public void playAnim(int animNo, long frameDelay, boolean loop)
+    {
+        super.setFrameSequence(animSeq[animNo]);
+        this.frameDelay = frameDelay;
+        animLoop = loop;
+        curFrameTime = 0;
+        setFrame(0);
+        animCurFrame = 0;
+        animDone = false;
+        animPlaying = true;
+    }
+
+    /**
+     * Mise à jour de l'animation du sprite. Cette méthode est automatiquement
+     * appelée par le paint() du FXGameCanvas.
+     * @param deltaTime
+     */
+    public void updateAnim(long deltaTime)
+    {
+        if(!animPlaying)
+            return;
+
+        if(curFrameTime > frameDelay)
+        {
+            animCurFrame++;
+            if(animCurFrame > getFrameSequenceLength() -1)
+            {
+                if(animLoop)
+                {
+                    animCurFrame=0;
+                }
+                else
+                {
+                    animDone = true;
+                    animPlaying = false;
+                    animCurFrame = getFrameSequenceLength() -1;
+                }
+            }
+
+            setFrame(animCurFrame);
+
+            curFrameTime = 0;
+        }
+
+        curFrameTime += deltaTime;
+        
+    }
+
+    /**
+     * Indique si l'animation est terminée.
+     * @return vrai ou faux.
+     */
+    public boolean animDone()
+    {
+        return animDone;
+    }
+}
